@@ -47,6 +47,8 @@ FLAGS_DEBUG    := $(FLAGS_main) -g -DEMP_TRACK_MEM
 # -flto (link-time optimization; we have only one compilation unit)
 # -ffast-math (may cause issues with some floating-point calculations)
 FLAGS_OPT      := $(FLAGS_main) -O3 -DNDEBUG -march=native -fno-exceptions
+# For heterogenous clusters:
+# FLAGS_OPT      := $(FLAGS_main) -O3 -DNDEBUG -march=x86-64-v3 -fno-exceptions
 FLAGS_GRUMPY   := $(FLAGS_main) -DNDEBUG -Wconversion -Weffc++
 FLAGS_COVERAGE := $(FLAGS_main)  -O0 -DEMP_TRACK_MEM -ftemplate-backtrace-limit=0 -fprofile-instr-generate -fcoverage-mapping -fno-inline -fno-elide-constructors
 
