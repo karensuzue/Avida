@@ -123,6 +123,7 @@ public:
     if (output.GetFilename().size()) {
       output.SetFilepath(avida.GetDataDir());
       output.AddColumn("Update", [this](){ return avida.GetUpdate(); });
+
       output.AddColumn("Fittest Organism ID", [this](){
         return avida.FindOrg_MaxTrait("fitness").GetBiotaID();
       });
@@ -132,6 +133,14 @@ public:
       output.AddColumn("Fittest Organism Fitness", [this](){
         return avida.CalcTraitMax("fitness");
       });
+
+      output.AddColumn("Average Organism Error", [this](){
+        return avida.CalcTraitAve("total_error");
+      });
+      output.AddColumn("Average Organism Fitness", [this](){
+        return avida.CalcTraitAve("fitness");
+
+      });
       output.AddColumn("Min Mutation Rate", [this](){
         return avida.CalcTraitMin("mut_prob");
       });
@@ -140,6 +149,10 @@ public:
       });
       output.AddColumn("Max Mutation Rate", [this](){
         return avida.CalcTraitMax("mut_prob");
+      });
+
+      output.AddColumn("Fittest Organism Mutation Rate", [this](){
+        return avida.FindOrg_MaxTrait("fitness").GetPhenotype().mut_prob;
       });
 
       output.AddColumn("Fittest Organism Genotype", [this](){

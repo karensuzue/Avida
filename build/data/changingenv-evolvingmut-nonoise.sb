@@ -1,0 +1,83 @@
+#!/bin/bash --login
+########## Define Resources Needed with SBATCH Lines ##########
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --array=0-319
+#SBATCH --cpus-per-task=1
+#SBATCH -t 01:00:00
+#SBATCH --mem=10GB
+#SBATCH --job-name=ROMEO
+#SBATCH -p defq
+###############################################################
+
+module purge
+module load GCC/14.3.0
+
+# For local testing, default to first array entry :)
+if [ -z "${SLURM_ARRAY_TASK_ID}" ]; then 
+    SLURM_ARRAY_TASK_ID=0
+fi
+
+# ID=$(( SLURM_ARRAY_TASK_ID + ${OFFSET:-0} ))
+ID=$(( SLURM_ARRAY_TASK_ID ))
+
+# Slowest to fastest
+CHANGE_PER_UPDATE=(
+    0.001
+    0.002
+    0.005
+    0.01
+    0.02
+    0.05
+    0.1
+    0.2
+    0.5
+    1
+    2
+    5
+    10
+    20
+    50
+    100
+)
+
+NUM_REPS=20
+NUM_CHANGE=${#CHANGE_PER_UPDATE[@]} # should be 16
+TOTAL_JOBS=$(( NUM_REPS * NUM_CHANGE )) # should be 320
+
+# Safety check
+if [ "${ID}" -lt 0 ] || [ "${ID}" -ge "${TOTAL_JOBS}" ]; then
+    echo "ID=${ID} is out of range [0, $((TOTAL_JOBS - 1))]"
+    exit 1
+fi
+
+CHANGE_INDEX=$(( ID / NUM_REPS ))
+REP_INDEX=$(( ID % NUM_REPS ))
+
+CHANGE=${CHANGE_PER_UPDATE[$CHANGE_INDEX]}
+SEED=$(( REP_INDEX + 1 ))
+
+echo "SLURM_ARRAY_TASK_ID=${SLURM_ARRAY_TASK_ID}"
+echo "CHANGE_INDEX=${CHANGE_INDEX}"
+echo "CHANGE_PER_UPDATE=${CHANGE}"
+echo "REP_INDEX=${REP_INDEX}"
+echo "SEED=${SEED}"
+
+../ROMEO \
+    --ROMEO.data_filename "ce_em_nn_${CHANGE}_${SEED}.csv" \
+    --ROMEO.starting_count 3600 \
+    --ROMEO.target_change_per_update "${CHANGE}" \
+    --base.random_seed "${SEED}" \
+    --tourny.data_filename "tourny_ce_em_nn_${CHANGE}_${SEED}.csv" \
+    --tourny.max_generations 200000 \
+    --tourny.pop_size 3600 \
+    --tourny.tourny_size 3
+
+status=$?
+
+if [ "$status" -eq 0 ]; then
+    echo "Finished successfully: ID=${ID}, change_per_update=${CHANGE}, seed=${SEED}"
+else
+    echo "Run failed: ID=${ID}, change_per_update=${CHANGE}, seed=${SEED}, exit_code=${status}"
+    exit "$status"
+fi
