@@ -235,7 +235,7 @@ public:
   void OnUpdateEnd(size_t update) {
     if (output_frequency && update % output_frequency == 0) {
       output.DoOutput();
-      std::println("TARGET: {}", emp::MakeString(target_genome));
+      // std::println("TARGET: {}", emp::MakeString(target_genome));
     }
   }
 
