@@ -43,6 +43,7 @@ private:
   double mut_rate_mut_prob = 0.01;
   double mut_rate_mut_size = 0.1;
   double target_change_per_update = 1.0;
+  double fitness_noise = 0.0;
 
   // Environment state
   emp::Vector<double> target_genome;
@@ -111,10 +112,11 @@ public:
       [this](){ return init_mut_prob; },
       [this](double p){ init_mut_prob = p; },
       "Per-site substitution probability", 'P');
-    avida.AddSetting("ROMEO.mut_size", mut_size, "standard deviation on mutation change");
-    avida.AddSetting("ROMEO.mut_rate_mut_prob", mut_rate_mut_prob, "Probability of a mutation rate changing.");
+    avida.AddSetting("ROMEO.mut_size", mut_size, "Standard deviation on mutation change");
+    avida.AddSetting("ROMEO.mut_rate_mut_prob", mut_rate_mut_prob, "Probability of a mutation rate changing");
     avida.AddSetting("ROMEO.mut_rate_mut_size", mut_rate_mut_size, "Standard deviation on mutation rate change");
     avida.AddSetting("ROMEO.target_change_per_update", target_change_per_update, "How many environment sites should change per update (0.5 -> one every 2 updates)");
+    avida.AddSetting("ROMEO.fitness_noise", fitness_noise, "Fitness noise");
   }
 
   // === Signal Listeners ===

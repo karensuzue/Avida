@@ -4,10 +4,19 @@
 # were time-averaged over the last K updates of each of the last N complete
 # environment turnovers, then averaged over 20 replicates.
 
+# install.packages(
+#     c("tidyverse", "data.table", "patchwork", "furrr"),
+#     lib = "~/R/library",
+#     repos = "https://cloud.r-project.org"
+# )
+
+# .libPaths(c("~/R/library", .libPaths()))
+
+
 library(tidyverse)
 library(data.table)
 library(patchwork)
-library(furr)
+library(furrr)
 
 # ---------------------------------------------------------------------
 # CONFIG
@@ -82,7 +91,7 @@ read_turnover_rows <- function(file) {
     rows_needed <- ceiling(num_turnovers * updates_per_turnover) + tail_window
 
     # Read only the tail of the file, plus the header separately
-    f <- fread(cmd = paste("tail -n", rows_needed + 1, shQuote(file)), header = FALSE)
+    df <- fread(cmd = paste("tail -n", rows_needed + 1, shQuote(file)), header = FALSE)
     setnames(df, names(fread(file, nrows = 0)))
 
     rows <- list()
