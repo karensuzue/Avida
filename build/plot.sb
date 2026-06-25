@@ -1,9 +1,0 @@
-#!/bin/bash
-#SBATCH --job-name=ROMEO_plot
-#SBATCH --cpus-per-task=4
-#SBATCH --mem=8G
-#SBATCH --time=01:00:00
-#SBATCH --partition=defq
-
-
-Rscript plot-changingenv-evolvingmut-nonoise.R

@@ -16,7 +16,7 @@
 library(tidyverse)
 library(data.table)
 library(patchwork)
-library(furrr)
+# library(furrr)
 
 # ---------------------------------------------------------------------
 # CONFIG
@@ -27,7 +27,7 @@ OUT_DIR <- "."
 TURNOVER_COUNT <- 10
 
 # Number of updates at the end of each turnover window to average over.
-TAIL_WINDOW <- 10
+TAIL_WINDOW <- 1
 
 # Filename pattern:
 # ce_em_nn_{change_per_update}_{seed}.csv
@@ -37,8 +37,8 @@ REGEX_PATTERN <- "^ce_em_nn_([^_]+)_([0-9]+)\\.csv$"
 # GENOME_LENGTH <- 100
 
 # Use the cores Slurm actually allocated to this job, not the whole node's count
-n_cores <- as.integer(Sys.getenv("SLURM_CPUS_PER_TASK", unset = "1"))
-plan(multisession, workers = max(1, n_cores))
+# n_cores <- as.integer(Sys.getenv("SLURM_CPUS_PER_TASK", unset = "1"))
+# plan(multisession, workers = max(1, n_cores))
 
 # ---------------------------------------------------------------------
 # HELPER FUNCTIONS
@@ -124,8 +124,16 @@ read_turnover_rows <- function(file) {
 # Resulting data frame:
 # change_per_update | max_fitness | avg_fitness | min_mut_rate | avg_mut_rate | max_mut_rate | fittest_org_mut_rate
 compile_average <- function(files) { # 'files' is a vector of filenames
-    rows <- future_map(files, read_turnover_rows)
-    rows <- rows[!sapply(rows, is.null)] # drop any files that failed to parse
+    # rows <- future_map(files, read_turnover_rows)
+    # rows <- rows[!sapply(rows, is.null)] # drop any files that failed to parse
+    # all_rows <- rbindlist(rows)
+    rows <- list()
+    for (f in files) {
+        turnover_rows <- read_turnover_rows(f)
+        if (!is.null(turnover_rows)) {
+            rows[[length(rows) + 1]] <- turnover_rows
+        }
+    }
     all_rows <- rbindlist(rows)
 
     summary_df <- all_rows %>%
