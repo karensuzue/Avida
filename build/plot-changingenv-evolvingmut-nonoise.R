@@ -7,6 +7,7 @@
 library(tidyverse)
 library(data.table)
 library(patchwork)
+library(furr)
 
 # ---------------------------------------------------------------------
 # CONFIG
@@ -25,6 +26,10 @@ REGEX_PATTERN <- "^ce_em_nn_([^_]+)_([0-9]+)\\.csv$"
 
 # MAX_GEN <- 200000
 # GENOME_LENGTH <- 100
+
+# Use the cores Slurm actually allocated to this job, not the whole node's count
+n_cores <- as.integer(Sys.getenv("SLURM_CPUS_PER_TASK", unset = "1"))
+plan(multisession, workers = max(1, n_cores))
 
 # ---------------------------------------------------------------------
 # HELPER FUNCTIONS
@@ -54,7 +59,6 @@ parse_filename <- function(file) {
 #
 # Uses data.table::fread instead of readr::read_csv for I/O speed
 read_turnover_rows <- function(file) {
-    # df <- fread(file, showProgress = FALSE)
     meta <- parse_filename(file)
     if (is.null(meta)) {
         print(paste("Error reading turnover rows for:", file))
@@ -77,17 +81,10 @@ read_turnover_rows <- function(file) {
     # How many rows from the end of the file could we possibly need?
     rows_needed <- ceiling(num_turnovers * updates_per_turnover) + tail_window
 
-    # Get the header separately
-    header <- names(fread(file, nrows = 0))
+    # Read only the tail of the file, plus the header separately
+    f <- fread(cmd = paste("tail -n", rows_needed + 1, shQuote(file)), header = FALSE)
+    setnames(df, names(fread(file, nrows = 0)))
 
-    # Count total data rows in the file (excludes header)
-    total_rows <- as.integer(system(paste("wc -l <", shQuote(file)), intern = TRUE)) - 1
-
-    skip_n <- max(1, total_rows - rows_needed + 1)  # +1 to account for header row offset
-
-    df <- fread(file, skip = skip_n, header = FALSE)
-    setnames(df, header)
-    
     rows <- list()
     for (turnover in 0:(num_turnovers - 1)) {
         turnover_end_index <- nrow(df) - round(updates_per_turnover * turnover)
@@ -118,13 +115,8 @@ read_turnover_rows <- function(file) {
 # Resulting data frame:
 # change_per_update | max_fitness | avg_fitness | min_mut_rate | avg_mut_rate | max_mut_rate | fittest_org_mut_rate
 compile_average <- function(files) { # 'files' is a vector of filenames
-    rows <- list()
-    for (f in files) {
-        turnover_rows <- read_turnover_rows(f)
-        if (!is.null(turnover_rows)) {
-            rows[[length(rows) + 1]] <- turnover_rows
-        }
-    }
+    rows <- future_map(files, read_turnover_rows)
+    rows <- rows[!sapply(rows, is.null)] # drop any files that failed to parse
     all_rows <- rbindlist(rows)
 
     summary_df <- all_rows %>%
