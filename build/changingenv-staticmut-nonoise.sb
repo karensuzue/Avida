@@ -42,6 +42,8 @@ CHANGE_PER_UPDATE=(
 )
 
 MU_VALUES=(
+    1e-10
+    1e-9
     0.0000001   # 1e-7,  below lower bound even for slowest env
     0.000001    # 1e-6
     0.00001     # 1e-5
@@ -54,8 +56,8 @@ MU_VALUES=(
 
 NUM_REPS=20
 NUM_CHANGE=${#CHANGE_PER_UPDATE[@]} # should be 16
-NUM_MU=${#MU_VALUES[@]}
-TOTAL_JOBS=$(( NUM_REPS * NUM_CHANGE * NUM_MU )) # should be 2560
+NUM_MU=${#MU_VALUES[@]} # should be 10
+TOTAL_JOBS=$(( NUM_REPS * NUM_CHANGE * NUM_MU )) # should be 3200
 
 # Safety check
 if [ "${ID}" -lt 0 ] || [ "${ID}" -ge "${TOTAL_JOBS}" ]; then
