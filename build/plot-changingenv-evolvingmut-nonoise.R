@@ -10,7 +10,7 @@
 #     repos = "https://cloud.r-project.org"
 # )
 
-# .libPaths(c("~/R/library", .libPaths()))
+.libPaths(c("~/R/library", .libPaths()))
 
 
 library(tidyverse)
@@ -21,7 +21,7 @@ library(patchwork)
 # ---------------------------------------------------------------------
 # CONFIG
 # --------------------------------------------------------------------- 
-DATA_DIR <- "/mnt/d/MINE/ce-em-nn-data/"
+DATA_DIR <- "/mnt/scratch/suzuekar/ce-em-nn-data/"
 OUT_DIR <- "."
 
 TURNOVER_COUNT <- 10
@@ -113,6 +113,11 @@ read_turnover_rows <- function(file) {
     }
     rows_df <- rbindlist(rows) # rows is a list of single-row data.tables, so we bind them
 
+    if (nrow(rows_df) == 0) {
+        print(paste("No usable turnover rows found in", file))
+        return(NULL)
+    }
+
     # Tag rows with which rate of environment change and seed they came from
     rows_df$change_per_update <- change_per_update
     rows_df$seed <- meta$seed
@@ -157,6 +162,14 @@ compile_average <- function(files) { # 'files' is a vector of filenames
 # RUN
 # ---------------------------------------------------------------------
 files <- list.files(DATA_DIR, pattern = REGEX_PATTERN, full.names = TRUE)
+
+for (f in files) {
+    r <- read_turnover_rows(f)
+    if (is.null(r) || ncol(r) < 5) {
+        cat("SUSPECT FILE:", f, "- ncol:", if (is.null(r)) "NULL" else ncol(r), "\n")
+    }
+}
+
 result <- compile_average(files)
 result
 
