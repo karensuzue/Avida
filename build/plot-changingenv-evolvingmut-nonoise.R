@@ -27,7 +27,7 @@ OUT_DIR <- "."
 TURNOVER_COUNT <- 10
 
 # Number of updates at the end of each turnover window to average over.
-TAIL_WINDOW <- 1
+TAIL_WINDOW <- 10
 
 # Filename pattern:
 # ce_em_nn_{change_per_update}_{seed}.csv
@@ -197,6 +197,7 @@ p_fitness <- ggplot(fitness_long, aes(x = change_per_update, y = value, color = 
     geom_line() +
     geom_point() +
     scale_x_log10() +
+    scale_y_log10() +
     labs(
         x = NULL,
         y = "Fitness",
@@ -209,6 +210,7 @@ p_mutation <- ggplot(mutation_long, aes(x = change_per_update, y = value, color 
     geom_line() +
     geom_point() +
     scale_x_log10() +
+    scale_y_log10() +
     labs(
         x = "Rate of environment change (genes per update)",
         y = "Mutation rate",
