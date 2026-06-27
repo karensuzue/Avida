@@ -222,7 +222,7 @@ compile_average <- function(per_replicate) {
 files <- list.files(DATA_DIR, pattern = REGEX_PATTERN, full.names = TRUE)
 all_rows <- compile_all_rows(files)
 per_replicate <- compile_per_replicate(all_rows)
-result <- compile_average(per-replicate)
+result <- compile_average(per_replicate)
 result
 
 write_csv(result, file.path(OUT_DIR, "turnover_summary.csv"))
@@ -308,13 +308,14 @@ p_fitness <- ggplot(fitness_long, aes(x = change_per_update, y = value, color = 
 
 p_mutation <- ggplot(mutation_long, aes(x = change_per_update, y = value, color = series)) +
     geom_point(
-        data = fitness_points_long,
+        data = mutation_points_long,
         alpha = 0.25, size = 1, shape = 16,
         position = position_jitter(width = 0.02, height = 0)
     ) +
     geom_line() +
-    geom_point() +
+    geom_point(size = 2) +
     scale_x_log10() +
+    scale_y_log10() +
     labs(
         x = "Rate of environment change (genes per update)",
         y = "Mutation rate",
