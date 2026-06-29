@@ -295,7 +295,6 @@ p_fitness <- ggplot(fitness_long, aes(x = change_per_update, y = value, color = 
         position = position_jitter(width = 0.02, height = 0)
     ) +
     geom_line() +
-    geom_point(size = 2) +
     scale_x_log10() +
     scale_y_log10() +
     labs(
@@ -313,7 +312,6 @@ p_mutation <- ggplot(mutation_long, aes(x = change_per_update, y = value, color 
         position = position_jitter(width = 0.02, height = 0)
     ) +
     geom_line() +
-    geom_point(size = 2) +
     scale_x_log10() +
     scale_y_log10() +
     labs(
