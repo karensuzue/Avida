@@ -1,7 +1,8 @@
 # This script produces generation vs. fitness 
-# and generation vs. mutation rate plots,
-# one pair of pages per change_per_update condition,
-# all replicates overlaid as points.
+# and generation vs. mutation rate plots.
+# PDF 1: one pair of pages per change_per_update condition
+# PDF 2: 2 pages, one for mutation, one for fitness,
+# faceted by change_per_update (all conditions on one page)
 
 # .libPaths(c("~/R/library", .libPaths()))
  
@@ -15,6 +16,7 @@ library(patchwork)
 DATA_DIR <- "/mnt/scratch/suzuekar/ce-em-nn-data/" 
 OUT_DIR <- "."
 OUT_NAME <- "ce_em_nn_timeseries.pdf"
+OUT_NAME_FACETED <- "ce_em_nn_timeseries_faceted.pdf"
 
 # Reading every generation is heavy
 # Set to 1 to read everything, or e.g. 1000 to keep every 1000th generation.
@@ -32,6 +34,7 @@ ROMEO_COLS <- c("Update", "Fittest Organism ID", "Fittest Organism Error",
 COLS_NEEDED <- c("Update", "Fittest Organism Fitness", "Average Organism Fitness",
                   "Min Mutation Rate", "Average Mutation Rate", "Max Mutation Rate")
 
+LOG_FLOOR <- 1e-6
 
 # ---------------------------------------------------------------------
 # HELPER FUNCTIONS
@@ -74,18 +77,24 @@ make_fitness_plot <- function(df, cpu) {
         filter(change_per_update == cpu) %>%
         pivot_longer(c(`Fittest Organism Fitness`, `Average Organism Fitness`),
                     names_to = "series", values_to = "value")
-    
-    # Mean across replicates (seeds) at each Update, per series
-    d_mean <- d %>%
+ 
+    # Spread across replicates (seeds) at each Update, per series
+    d_summary <- d %>%
         group_by(Update, series) %>%
-        summarise(value = mean(value, na.rm = TRUE), .groups = "drop")
-
-    ggplot(d, aes(Update, value, color = factor(seed), shape = series)) +
-        geom_point(alpha = 0.5, size = 1) +
-        geom_line(data = d_mean, aes(Update, value, linetype = series),
-                  color = "black", inherit.aes = FALSE) +
+        summarise(mean = mean(value, na.rm = TRUE),
+                  lo = min(value, na.rm = TRUE),
+                  hi = max(value, na.rm = TRUE),
+                  .groups = "drop") %>%
+        mutate(mean = pmax(mean, LOG_FLOOR),
+               lo = pmax(lo, LOG_FLOOR),
+               hi = pmax(hi, LOG_FLOOR))
+ 
+    ggplot(d_summary, aes(Update, mean, color = series, fill = series)) +
+        geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.2, color = NA) +
+        geom_line() +
+        scale_y_log10() +
         labs(title = paste("Fitness, change_per_update =", cpu),
-             x = "Update", y = "Fitness", color = "Seed", shape = "Series") +
+             x = "Update", y = "Fitness", color = "Series", fill = "Series") +
         theme_bw()
 }
 
@@ -95,18 +104,81 @@ make_mutrate_plot <- function(df, cpu) {
         filter(change_per_update == cpu) %>%
         pivot_longer(c(`Min Mutation Rate`, `Average Mutation Rate`, `Max Mutation Rate`),
                      names_to = "series", values_to = "value")
-    
-    # Mean across replicates (seeds) at each Update, per series
-    d_mean <- d %>%
+ 
+    # Spread across replicates (seeds) at each Update, per series
+    d_summary <- d %>%
         group_by(Update, series) %>%
-        summarise(value = mean(value, na.rm = TRUE), .groups = "drop")
-
-    ggplot(d, aes(Update, value, color = factor(seed), shape = series)) +
-        geom_point(alpha = 0.5, size = 1) +
-        geom_line(data = d_mean, aes(Update, value, linetype = series),
-                  color = "black", inherit.aes = FALSE) +
+        summarise(mean = mean(value, na.rm = TRUE),
+                  lo = min(value, na.rm = TRUE),
+                  hi = max(value, na.rm = TRUE),
+                  .groups = "drop") %>%
+        mutate(mean = pmax(mean, LOG_FLOOR),
+               lo = pmax(lo, LOG_FLOOR),
+               hi = pmax(hi, LOG_FLOOR))
+ 
+    ggplot(d_summary, aes(Update, mean, color = series, fill = series)) +
+        geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.2, color = NA) +
+        geom_line() +
+        scale_y_log10() +
         labs(title = paste("Mutation rate, change_per_update =", cpu),
-             x = "Update", y = "Mutation rate", color = "Seed", shape = "Series") +
+             x = "Update", y = "Mutation rate", color = "Series", fill = "Series") +
+        theme_bw()
+}
+
+# Label facets as "change_per_update = X" instead of just the bare number
+cpu_labeller <- function(value) paste("change_per_update =", value)
+
+make_fitness_facet <- function(df) {
+    d <- df %>%
+        pivot_longer(c(`Fittest Organism Fitness`, `Average Organism Fitness`),
+                    names_to = "series", values_to = "value")
+ 
+    # Spread across replicates (seeds) at each Update, per series, per condition
+    d_summary <- d %>%
+        group_by(change_per_update, Update, series) %>%
+        summarise(mean = mean(value, na.rm = TRUE),
+                  lo = min(value, na.rm = TRUE),
+                  hi = max(value, na.rm = TRUE),
+                  .groups = "drop") %>%
+        mutate(mean = pmax(mean, LOG_FLOOR),
+               lo = pmax(lo, LOG_FLOOR),
+               hi = pmax(hi, LOG_FLOOR))
+ 
+    ggplot(d_summary, aes(Update, mean, color = series, fill = series)) +
+        geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.2, color = NA) +
+        geom_line() +
+        scale_y_log10() +
+        facet_wrap(~ change_per_update, scales = "free_y",
+                   labeller = labeller(change_per_update = cpu_labeller)) +
+        labs(title = "Fitness across all change_per_update conditions",
+             x = "Update", y = "Fitness", color = "Series", fill = "Series") +
+        theme_bw()
+}
+ 
+make_mutrate_facet <- function(df) {
+    d <- df %>%
+        pivot_longer(c(`Min Mutation Rate`, `Average Mutation Rate`, `Max Mutation Rate`),
+                     names_to = "series", values_to = "value")
+ 
+    # Spread across replicates (seeds) at each Update, per series, per condition
+    d_summary <- d %>%
+        group_by(change_per_update, Update, series) %>%
+        summarise(mean = mean(value, na.rm = TRUE),
+                  lo = min(value, na.rm = TRUE),
+                  hi = max(value, na.rm = TRUE),
+                  .groups = "drop") %>%
+        mutate(mean = pmax(mean, LOG_FLOOR),
+               lo = pmax(lo, LOG_FLOOR),
+               hi = pmax(hi, LOG_FLOOR))
+ 
+    ggplot(d_summary, aes(Update, mean, color = series, fill = series)) +
+        geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.2, color = NA) +
+        geom_line() +
+        scale_y_log10() +
+        facet_wrap(~ change_per_update, scales = "free_y",
+                   labeller = labeller(change_per_update = cpu_labeller)) +
+        labs(title = "Mutation rate across all change_per_update conditions",
+             x = "Update", y = "Mutation rate", color = "Series", fill = "Series") +
         theme_bw()
 }
 
@@ -130,3 +202,11 @@ for (cpu in cpu_values) {
 dev.off()
 
 print(paste("Wrote", length(cpu_values) * 2, "pages to", out_path))
+
+out_path <- file.path(OUT_DIR, OUT_NAME_FACETED)
+pdf(out_path, width = 14, height = 10)
+print(make_fitness_facet(all_data))
+print(make_mutrate_facet(all_data))
+dev.off()
+
+print(paste("Wrote 2 pages to", out_path))
