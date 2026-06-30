@@ -23,7 +23,7 @@
   );
 
 #define AVIDA_REQUIRE_TRAIT(TYPE, NAME)                              \
-static_assert(                                                       \
+  static_assert(                                                     \
     requires(const typename AVIDA_T::phenotype_t & p) {              \
         { p.NAME } -> std::convertible_to<TYPE>;                     \
     },                                                               \
@@ -65,12 +65,13 @@ public:
 // Retrieve via TraitManager::GetTyped<TRAIT_T>() for use in performance-sensitive loops.
 template <typename TRAIT_T, typename AVIDA_T>
 class Trait : public TraitBase<AVIDA_T> {
-private:
+public:
   using base_t = TraitBase<AVIDA_T>;
   using organism_t = typename AVIDA_T::organism_t;
   using get_fun_t  = std::function<TRAIT_T &(organism_t &)>;
   using cget_fun_t = std::function<const TRAIT_T &(const organism_t &)>;
 
+private:
   get_fun_t  get_fun;
   cget_fun_t cget_fun;
 
@@ -83,8 +84,8 @@ public:
     : base_t(name, desc, filename, line)
     , get_fun(std::move(get_fun)), cget_fun(std::move(cget_fun)) {}
 
-  [[nodiscard]] TRAIT_T &       Get(organism_t & o)       { return get_fun(o); }
-  [[nodiscard]] const TRAIT_T & Get(const organism_t & o) const { return cget_fun(o); }
+  [[nodiscard]] TRAIT_T &          Get(organism_t & o)       { return get_fun(o); }
+  [[nodiscard]] const TRAIT_T &    Get(const organism_t & o) const { return cget_fun(o); }
   [[nodiscard]] const get_fun_t  & GetAccessFun()      const { return get_fun; }
   [[nodiscard]] const cget_fun_t & GetConstAccessFun() const { return cget_fun; }
 
@@ -132,6 +133,8 @@ private:
 
 public:
   ~TraitManager() { Clear(); }
+
+  [[nodiscard]] bool Has(const emp::String & name) const { return trait_map.contains(name); }
 
   // Generic lookup — use for AsDouble/AsString/AsSpan (virtual, safe for any type).
   const trait_base_t & Get(const emp::String & name) const {

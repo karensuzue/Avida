@@ -20,6 +20,7 @@ private:
   using ModuleBase<AVIDA_T>::avida;
 
   AvidaVM::inst_set_t inst_set;
+  double offspring_size_range = 2.0;  // Offspring genome must be within this factor of parent size.
 
 public:
   OrgTypeAvidian(AVIDA_T & avida)
@@ -43,12 +44,25 @@ public:
     using inst_set_t = AvidaVM::inst_set_t;
   };
 
+  void RegisterSettings() {
+    avida.AddSetting("AvidaGP.offspring_size_range", offspring_size_range,
+      "Offspring genome size must be within this factor of the parent's (2.0 = half to double); "
+      "divides outside the range fail.");
+  }
+
   void RegisterTraits() {
     AVIDA_REGISTER_TRAIT(hardware, "Virtual CPU for this organism");
   }
 
   void RegisterCallbacks() {
     AvidaVM::BuildInstSet(inst_set);  // Build the standard AvidaVM instruction set.
+    // Extract the (hardware-specific) output here, then let Avida broadcast it.
+    // AVIDA_SIGNAL is kept in the Avida class: GCC 15 mis-evaluates its requires-clause
+    // when expanded inside a stored callback lambda, silently dropping all responders.
+    AddCallback("Output", [this](size_t biota_id){
+      auto & org = avida.GetOrg(biota_id);
+      avida.SignalOutput(org, org.Hardware().GetOutput());
+    });
   }
 
   static constexpr size_t MAX_CALLBACKS = 32;  // Max number of callback instructions allowed.
@@ -98,6 +112,13 @@ public:
   template <concepts::Organism ORG_T>
   void OnOffspringInit(ORG_T & offspring, ORG_T & /*parent*/) {
     offspring.GetPhenotype().hardware.SetInstSet(inst_set);
+  }
+
+  template <concepts::Organism ORG_T, concepts::Genome GENOME_T>
+  bool TestOffspringGenome(const ORG_T & parent, const GENOME_T & genome) const {
+    const size_t parent_size = parent.GetGenome().size();
+    return (genome.size() >= parent_size / offspring_size_range) &&
+           (genome.size() <= parent_size * offspring_size_range);
   }
 
   // === Handlers ===

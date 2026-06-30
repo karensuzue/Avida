@@ -10,6 +10,7 @@
 
 #include <filesystem>  // std::filesystem::path
 #include <fstream>     // std::ifstream, std::ofstream
+#include <type_traits> // std::is_arithmetic_v, std::invoke_result_t
 
 #include "emp/base/Ptr.hpp"
 #include "emp/base/vector.hpp"
@@ -50,6 +51,8 @@ public:
   struct avida_stub_t {
     struct stub_genome_t {};
     using genome_t = stub_genome_t;
+    struct stub_organism_t {};
+    using organism_t = stub_organism_t;
   };
   template <typename T> using to_global_types = typename T::GlobalTypes;
   using stub_pack_t = emp::TypePack<PLUG_IN_Ts<avida_stub_t>...>;
@@ -76,6 +79,7 @@ public:
 private:
   TraitManager<this_t> trait_man;
   emp::RobinHoodMap<emp::String, size_t> task_ids;
+  emp::vector<emp::String> task_names;  // Task name by ID (index == task ID).
   PlugInManager<this_t, PLUG_IN_Ts<this_t>...> plug_ins;
 
   emp::SettingsManager settings; // Collection of all configurable settings
@@ -84,7 +88,9 @@ private:
   emp::Random random{0};         // Central random number generator
   biota_t biota{};               // Collection of all current organisms
 
-  enum class RunState { INITIALIZING, PAUSED, RUNNING, EXITING, ERROR };
+  // EXITING = stop has been requested; finish the current update, then tear down.
+  // COMPLETE = end-of-run teardown has happened (organisms cleared); nothing left to run.
+  enum class RunState { INITIALIZING, PAUSED, RUNNING, EXITING, COMPLETE, ERROR };
   RunState run_state = RunState::INITIALIZING;
 
 public:
@@ -121,7 +127,9 @@ public:
       [this](emp::vector<emp::String> kw_args) {
         emp::String filename = kw_args.size() ? kw_args[0] : "Avida.cfg";
         std::println("Generating config file '{}'...", filename);
-        settings.Save(filename);
+        std::ofstream ofs{filename};
+        settings.Save(ofs);
+        AVIDA_SIGNAL(OnConfigWrite(ofs));  // Set up any traits in the phenotype.
         Exit();
       }, "Generate a config file with the provided name (default: Avida.cfg) and stop", 'g', /*max_args=*/ 1);
 
@@ -131,8 +139,8 @@ public:
     AVIDA_SIGNAL(RegisterCallbacks()); // Set up new instructions for the instruction set.
   }
   Avida(emp::vector<emp::String> args) : Avida() { settings.LoadArgs(args); }
-  ~Avida() { 
-    Exit();
+  ~Avida() {
+    Shutdown();
   }
 
   // === Basic Accessors ===
@@ -158,6 +166,8 @@ public:
   [[nodiscard]] const auto & GetTrait(const emp::String & name) const {
     return trait_man.Get(name);
   }
+
+  [[nodiscard]] bool HasTrait(const emp::String & name) const { return trait_man.Has(name); }
 
   // Typed trait lookup: returns a Trait<TRAIT_T> reference with direct organism-level accessors,
   // bypassing virtual dispatch. Use this in performance-sensitive loops.
@@ -187,6 +197,13 @@ public:
     });
   }
 
+  [[nodiscard]] double CalcTraitSum(const emp::String & name) const {
+    const auto & trait = GetTrait(name);
+    return biota.CalcSum([&trait](const organism_t & org){
+      return trait.AsDouble(org);
+    });
+  }
+
   [[nodiscard]] auto & FindOrg_MinTrait(const emp::String & name) const {
     emp_assert(biota.GetNumOrgs() > 0);
     const auto & trait = GetTrait(name);
@@ -204,6 +221,56 @@ public:
     });
     return biota[id];
   }
+
+  // Find an organism by a description, such as "fitness:max" or ":first" or ":1038"
+  [[nodiscard]] auto & FindOrg(this auto & self, emp::String desc) {
+    emp::String trait_name = desc.Pop(':');
+    if (trait_name == "") {
+      if (desc == "first") return self.GetFirstOrg(); // ":first"
+      else emp::notify::Error("Uknown FindOrg command ':", desc, "'");
+    }
+    else if (desc == "max") return self.FindOrg_MaxTrait(trait_name);
+    else if (desc == "min") return self.FindOrg_MinTrait(trait_name);
+  }
+
+  // ====== Output Management ======
+
+  // Announce an output column to every output-interface module (file, web, console, ...).
+  // The receiver can decide how they want to interpret the return value from fun.
+  // (E.g., creating CSV outputs, graphs, etc.)
+  template <typename FUN_T>
+  void AddOutput(const emp::String & filename, const emp::String & output_name, FUN_T fun) {
+    AVIDA_SIGNAL(OnDeclareOutput(filename, output_name, fun));
+  }
+
+  // Collect trait information from the active population.
+  // Use "mean" value by default.  Trait name can be followed with a specifier:
+  //   trait:min   -- Calculate this trait for all organisms and return lowest.
+  //   trait:mean  -- Calculate this trait for all organisms and return average.
+  //   trait:max   -- Calculate this trait for all organisms and return highest.
+  //   trait:sum   -- Calculate this trait for all organisms and return total.
+  //   trait:first -- Calculate this trait for only the first organism and it.
+  void AddOutputTrait(const emp::String & filename,
+                      const emp::String & output_name,
+                      emp::String trait_info) {
+    emp::String trait = trait_info.Pop(':');
+    if (trait_info.empty() || trait_info == "mean" || trait_info == "ave") {
+      AddOutput(filename, output_name, [this, trait](){ return CalcTraitAve(trait); });
+    } else if (trait_info == "min") {
+      AddOutput(filename, output_name, [this, trait](){ return CalcTraitMin(trait); });
+    } else if (trait_info == "max") {
+      AddOutput(filename, output_name, [this, trait](){ return CalcTraitMax(trait); });
+    } else if (trait_info == "sum") {
+      AddOutput(filename, output_name, [this, trait](){ return CalcTraitSum(trait); });
+    } else if (trait_info == "first") {
+      AddOutput(filename, output_name, [this, trait](){
+        return GetTrait(trait).AsString( GetFirstOrg() );
+      });
+    } else {
+      emp::notify::Error("Unknown stat '", trait_info, "' for trait '", trait, "'.");
+    }
+  }
+
 
   // Get a plug-in by realized type.
   template <typename PLUG_IN_T>
@@ -241,9 +308,37 @@ public:
 
   size_t RegisterTask(const emp::String & name) {
     emp_assert(!task_ids.contains(name), "Registering same task twice", name);
-    const size_t task_id = task_ids.size();
+    const size_t task_id = task_names.size();
     task_ids[name] = task_id;
+    task_names.push_back(name);
     return task_id;
+  }
+
+  // === Task Lookups ===
+
+  [[nodiscard]] size_t GetNumTasks() const { return task_names.size(); }
+  [[nodiscard]] bool HasTask(const emp::String & name) const { return task_ids.contains(name); }
+
+  // Look up the unique ID for an already-registered task by name.
+  [[nodiscard]] size_t GetTaskID(const emp::String & name) const {
+    emp_assert(task_ids.contains(name), "Requesting an unknown task name", name);
+    return task_ids.FindValue(name, 0);
+  }
+
+  // Look up the name of a task by its ID.
+  [[nodiscard]] const emp::String & GetTaskName(size_t task_id) const {
+    emp_assert(task_id < task_names.size(), "Requesting an invalid task ID", task_id);
+    return task_names[task_id];
+  }
+
+  // Broadcast that an organism just performed a task so other modules can respond.
+  void SignalTask(organism_t & org, size_t task_id) {
+    AVIDA_SIGNAL(OnTaskComplete(org, task_id));
+  }
+
+  // Broadcast a value an organism sent to output so other modules can respond.
+  void SignalOutput(organism_t & org, uint32_t output) {
+    AVIDA_SIGNAL(OnOutputValue(org, output));
   }
 
   // ====== Organism Management ======
@@ -302,13 +397,19 @@ public:
     AVIDA_SIGNAL(OnPlacement(offspring));               // Trigger: activate organism in populations
   }
 
-  /// Collect an offspring from a designated parent organism.
+  /// Test if an offspring genome is okay to turn into a new organism.
+  bool TestOffspringGenome(const organism_t & parent, const genome_t & genome) const {
+    return genome.size() > 0 && AVIDA_TEST(TestOffspringGenome(parent, genome));
+  }
+
+  /// Collect and place an offspring from a designated parent organism.
   void DivideOrg(size_t parent_id) {
     organism_t & parent = biota[parent_id];
     genome_t offspring_genome = GetOffspringGenome(parent);
-    if (offspring_genome.size() == 0) return;               // Stop early if no genome was provided.
-    organism_t & offspring = BuildOffspring(parent, std::move(offspring_genome));
-    PlaceOffspring(offspring);
+    if (TestOffspringGenome(parent, offspring_genome)) {
+      organism_t & offspring = BuildOffspring(parent, std::move(offspring_genome));
+      PlaceOffspring(offspring);
+    }
   }
 
   using PendingOffspring = ::PendingOffspring<genome_t>;
@@ -353,6 +454,16 @@ public:
     return plug_ins.template TriggerCollector<RETURN_T>(std::forward<Ts>(args)...);
   }
 
+  template <typename... Ts>
+  bool TriggerTests(Ts &&... args) {
+    return plug_ins.template TriggerTests(std::forward<Ts>(args)...);
+  }
+
+  template <typename... Ts>
+  bool TriggerTests(Ts &&... args) const {
+    return plug_ins.template TriggerTests(std::forward<Ts>(args)...);
+  }
+
   // Process a single update for Avida
   void DoUpdate() {
     emp_assert(GetNumOrgs() > 0, "Running DoUpdate() with no organisms.");
@@ -385,23 +496,40 @@ public:
     auto reserve_total = std::accumulate(reserve_counts.begin(), reserve_counts.end(), size_t{0});
     biota.Reserve(reserve_total + 1);
     SetupDataDir();
+    AddOutput("stats.csv", "Organism Count", [this](){ return GetNumOrgs(); });
+    AddOutput("stats.csv", "Organism Total", [this](){ return GetTotalOrgs(); });
+    AddOutput("stats.csv", "Average Genome Length", [this](){
+      return biota.CalcAverage([](const organism_t & org){ return org.GetGenome().size(); });
+    });
+    AddOutput(">", "PopSize", [this](){ return GetNumOrgs(); });
     AVIDA_SIGNAL(BeforeStart()); // Trigger plug-ins to initialize.
+    AddOutput(">", "\n    First Genome", [this](){ return std::format("[{}]", GetFirstOrg().GetGenomeSequence()); });
     settings.PrintStatus();
     AVIDA_SIGNAL(OnStart());     // Trigger injection of start organisms.
   }
 
   void Run() {
-    if (run_state == RunState::EXITING) return;
-    if (run_state == RunState::INITIALIZING) Initialize();
-    run_state = RunState::RUNNING;
-    while (run_state == RunState::RUNNING) DoUpdate();
+    emp_assert(run_state != RunState::COMPLETE, "Run() should not be called on finished run.");
+    if (run_state < RunState::EXITING) {
+      if (run_state == RunState::INITIALIZING) Initialize();
+      run_state = RunState::RUNNING;
+      while (run_state == RunState::RUNNING) DoUpdate();
+    }
+    if (run_state == RunState::EXITING) Shutdown();
   }
 
+  // Request that the run stop.  Teardown is deferred to Shutdown() (called once the current
+  // update finishes) so the final update's signal handlers still see a populated biota.
   void Exit() {
-    if (run_state == RunState::EXITING) return; // Already exiting.
-    run_state = RunState::EXITING;              // Change run_state in case check by plug-ins
+    if (run_state != RunState::COMPLETE) run_state = RunState::EXITING;
+  }
+
+  // End-of-run teardown.  Idempotent: the body runs at most once.
+  void Shutdown() {
+    if (run_state == RunState::COMPLETE) return;
+    run_state = RunState::COMPLETE;
     SaveState("final_save");
-    AVIDA_SIGNAL(BeforeExit());                 // Notify plug-ins of impending exit
+    AVIDA_SIGNAL(BeforeExit());                 // Notify plug-ins of impending exit (biota intact)
     biota.Clear();                              // Clean up organisms
     trait_man.Clear();                          // Clean up traits
   }
