@@ -72,7 +72,7 @@ read_file <- function(file) {
 }
 
 
-make_fitness_plot <- function(df, cpu) {
+make_fitness_plot <- function(df, cpu, ylim) {
     d <- df %>%
         filter(change_per_update == cpu) %>%
         pivot_longer(c(`Fittest Organism Fitness`, `Average Organism Fitness`),
@@ -92,14 +92,14 @@ make_fitness_plot <- function(df, cpu) {
     ggplot(d_summary, aes(Update, mean, color = series, fill = series)) +
         geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.2, color = NA) +
         geom_line() +
-        scale_y_log10() +
+        scale_y_log10(limits = ylim) +
         labs(title = paste("Fitness, change_per_update =", cpu),
              x = "Update", y = "Fitness", color = "Series", fill = "Series") +
         theme_bw()
 }
 
 
-make_mutrate_plot <- function(df, cpu) {
+make_mutrate_plot <- function(df, cpu, ylim) {
     d <- df %>%
         filter(change_per_update == cpu) %>%
         pivot_longer(c(`Min Mutation Rate`, `Average Mutation Rate`, `Max Mutation Rate`),
@@ -119,7 +119,7 @@ make_mutrate_plot <- function(df, cpu) {
     ggplot(d_summary, aes(Update, mean, color = series, fill = series)) +
         geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.2, color = NA) +
         geom_line() +
-        scale_y_log10() +
+        scale_y_log10(limits = ylim) +
         labs(title = paste("Mutation rate, change_per_update =", cpu),
              x = "Update", y = "Mutation rate", color = "Series", fill = "Series") +
         theme_bw()
@@ -128,7 +128,7 @@ make_mutrate_plot <- function(df, cpu) {
 # Label facets as "change_per_update = X" instead of just the bare number
 cpu_labeller <- function(value) paste("change_per_update =", value)
 
-make_fitness_facet <- function(df) {
+make_fitness_facet <- function(df, ylim) {
     d <- df %>%
         pivot_longer(c(`Fittest Organism Fitness`, `Average Organism Fitness`),
                     names_to = "series", values_to = "value")
@@ -147,7 +147,7 @@ make_fitness_facet <- function(df) {
     ggplot(d_summary, aes(Update, mean, color = series, fill = series)) +
         geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.2, color = NA) +
         geom_line() +
-        scale_y_log10() +
+        scale_y_log10(limits = ylim) +
         facet_wrap(~ change_per_update, scales = "free_y",
                    labeller = labeller(change_per_update = cpu_labeller)) +
         labs(title = "Fitness across all change_per_update conditions",
@@ -155,7 +155,7 @@ make_fitness_facet <- function(df) {
         theme_bw()
 }
  
-make_mutrate_facet <- function(df) {
+make_mutrate_facet <- function(df, ylim) {
     d <- df %>%
         pivot_longer(c(`Min Mutation Rate`, `Average Mutation Rate`, `Max Mutation Rate`),
                      names_to = "series", values_to = "value")
@@ -174,7 +174,7 @@ make_mutrate_facet <- function(df) {
     ggplot(d_summary, aes(Update, mean, color = series, fill = series)) +
         geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.2, color = NA) +
         geom_line() +
-        scale_y_log10() +
+        scale_y_log10(limits = ylim) +
         facet_wrap(~ change_per_update, scales = "free_y",
                    labeller = labeller(change_per_update = cpu_labeller)) +
         labs(title = "Mutation rate across all change_per_update conditions",
@@ -192,6 +192,16 @@ all_data <- map_dfr(files, read_file)
 
 cpu_values <- sort(unique(all_data$change_per_update))
 print(paste("Conditions:", paste(cpu_values, collapse = ", ")))
+
+# Global y-axis limits, shared across all plots
+fitness_ylim <- c(
+    pmax(min(all_data$`Average Organism Fitness`, na.rm = TRUE), LOG_FLOOR),
+    max(all_data$`Fittest Organism Fitness`, na.rm = TRUE)
+)
+mutrate_ylim <- c(
+    pmax(min(all_data$`Min Mutation Rate`, na.rm = TRUE), LOG_FLOOR),
+    max(all_data$`Max Mutation Rate`, na.rm = TRUE)
+)
 
 out_path <- file.path(OUT_DIR, OUT_NAME)
 pdf(out_path, width = 11, height = 7)
