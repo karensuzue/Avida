@@ -66,9 +66,9 @@ private:
     org.GetPhenotype().total_error = traits.CalcSum();
     org.GetPhenotype().fitness = 1.0 / org.GetPhenotype().total_error;
 
-    if (random.P(fitness_noise)) {
-      org.GetPhenotype().fitness 
-    }
+    // if (random.P(fitness_noise)) {
+    //   org.GetPhenotype().fitness 
+    // }
   }
 
 
