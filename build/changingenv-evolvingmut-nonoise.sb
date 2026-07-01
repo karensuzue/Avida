@@ -2,7 +2,7 @@
 ########## Define Resources Needed with SBATCH Lines ##########
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --array=0-319
+#SBATCH --array=0-339
 #SBATCH --cpus-per-task=1
 #SBATCH -t 01:00:00
 #SBATCH --mem=10GB
@@ -23,6 +23,7 @@ ID=$(( SLURM_ARRAY_TASK_ID ))
 
 # Slowest to fastest
 CHANGE_PER_UPDATE=(
+    0
     0.001
     0.002
     0.005
@@ -42,8 +43,8 @@ CHANGE_PER_UPDATE=(
 )
 
 NUM_REPS=20
-NUM_CHANGE=${#CHANGE_PER_UPDATE[@]} # should be 16
-TOTAL_JOBS=$(( NUM_REPS * NUM_CHANGE )) # should be 320
+NUM_CHANGE=${#CHANGE_PER_UPDATE[@]} # should be 17
+TOTAL_JOBS=$(( NUM_REPS * NUM_CHANGE )) # should be 340
 
 # Safety check
 if [ "${ID}" -lt 0 ] || [ "${ID}" -ge "${TOTAL_JOBS}" ]; then
