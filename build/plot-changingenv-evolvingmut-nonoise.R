@@ -51,6 +51,13 @@ parse_filename <- function(file) {
         print(paste("Error parsing filename:", nm))
         return(NULL)
     }
+
+    cpu <- suppressWarnings(as.double(parts[2]))
+    if (is.na(cpu)) {
+        print(paste("Non-numeric change_per_update in filename:", nm))
+        return(NULL)
+    }
+
     parsed <- list(
         change_per_update = as.double(parts[2]),
         seed = as.integer(parts[3])
@@ -97,6 +104,14 @@ read_turnover_rows <- function(file) {
     total_rows <- as.integer(system(paste("wc -l <", shQuote(file)), intern = TRUE)) - 1
 
     skip_n <- max(1, total_rows - rows_needed + 1)  # +1 to account for header row offset
+
+    if (is.na(skip_n)) {
+        cat("DEBUG — file:", file, "\n")
+        cat("  change_per_update:", change_per_update, "\n")
+        cat("  total_rows:", total_rows, "\n")
+        cat("  rows_needed:", rows_needed, "\n")
+        cat("  file.size:", file.size(file), "\n")
+    }
 
     df <- fread(file, skip = skip_n, header = FALSE)
     setnames(df, header)
